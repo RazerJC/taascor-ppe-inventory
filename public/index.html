@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TAASCOR PPE Inventory Management</title>
+  <link rel="icon" href="/logo-le-reacteur.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <!-- PIN Lock Screen -->
+  <div id="pinLock" class="pin-lock">
+    <div class="pin-container">
+      <img src="/logo-le-reacteur.png" alt="TAASCOR" class="pin-logo">
+      <h2>TAASCOR PPE Inventory</h2>
+      <p class="pin-subtitle">Enter 6-Digit PIN to Continue</p>
+      <div class="pin-dots" id="pinDots">
+        <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+        <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+      </div>
+      <div class="pin-error" id="pinError"></div>
+      <div class="pin-pad">
+        <button class="pin-key" onclick="pinInput('1')">1</button>
+        <button class="pin-key" onclick="pinInput('2')">2</button>
+        <button class="pin-key" onclick="pinInput('3')">3</button>
+        <button class="pin-key" onclick="pinInput('4')">4</button>
+        <button class="pin-key" onclick="pinInput('5')">5</button>
+        <button class="pin-key" onclick="pinInput('6')">6</button>
+        <button class="pin-key" onclick="pinInput('7')">7</button>
+        <button class="pin-key" onclick="pinInput('8')">8</button>
+        <button class="pin-key" onclick="pinInput('9')">9</button>
+        <button class="pin-key pin-key-clear" onclick="pinClear()"><i class="fas fa-eraser"></i></button>
+        <button class="pin-key" onclick="pinInput('0')">0</button>
+        <button class="pin-key pin-key-delete" onclick="pinDelete()"><i class="fas fa-backspace"></i></button>
+      </div>
+      <p class="pin-hint">Default PIN: 000000</p>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="mainApp" class="app-container" style="display:none;">
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+      <button class="hamburger" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+      <span class="mobile-title">TAASCOR PPE</span>
+    </div>
+
+    <!-- Sidebar Overlay for Mobile -->
+    <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <img src="/logo-le-reacteur.png" alt="TAASCOR" class="sidebar-logo">
+        <div class="sidebar-brand">
+          <h3>TAASCOR</h3>
+          <span>PPE Inventory System</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#" class="nav-item active" data-page="dashboard" onclick="navigate('dashboard', this)">
+          <i class="fas fa-th-large"></i><span>Dashboard</span>
+        </a>
+        <a href="#" class="nav-item" data-page="inventory" onclick="navigate('inventory', this)">
+          <i class="fas fa-hard-hat"></i><span>PPE Inventory</span>
+        </a>
+        <a href="#" class="nav-item" data-page="incoming" onclick="navigate('incoming', this)">
+          <i class="fas fa-truck-loading"></i><span>Incoming PPE</span>
+        </a>
+        <a href="#" class="nav-item" data-page="distribution" onclick="navigate('distribution', this)">
+          <i class="fas fa-share-square"></i><span>PPE Distribution</span>
+        </a>
+        <a href="#" class="nav-item" data-page="clients" onclick="navigate('clients', this)">
+          <i class="fas fa-building"></i><span>Client Companies</span>
+        </a>
+        <a href="#" class="nav-item" data-page="transactions" onclick="navigate('transactions', this)">
+          <i class="fas fa-history"></i><span>Transaction History</span>
+        </a>
+        <a href="#" class="nav-item" data-page="reports" onclick="navigate('reports', this)">
+          <i class="fas fa-chart-bar"></i><span>Reports</span>
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="#" class="nav-item" onclick="showSettings()">
+          <i class="fas fa-cog"></i><span>Settings</span>
+        </a>
+        <a href="#" class="nav-item" onclick="showNetworkInfo()">
+          <i class="fas fa-mobile-alt"></i><span>Phone Access</span>
+        </a>
+        <a href="#" class="nav-item" onclick="lockApp()">
+          <i class="fas fa-lock"></i><span>Lock App</span>
+        </a>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- ============ DASHBOARD ============ -->
+      <div id="page-dashboard" class="page active">
+        <div class="page-header">
+          <h1><i class="fas fa-th-large"></i> Dashboard</h1>
+          <span class="header-date" id="currentDate"></span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card stat-blue">
+            <div class="stat-icon"><i class="fas fa-hard-hat"></i></div>
+            <div class="stat-info"><span class="stat-value" id="statTotalItems">0</span><span class="stat-label">Total PPE Items</span></div>
+          </div>
+          <div class="stat-card stat-green">
+            <div class="stat-icon"><i class="fas fa-boxes"></i></div>
+            <div class="stat-info"><span class="stat-value" id="statTotalStock">0</span><span class="stat-label">Total Stock</span></div>
+          </div>
+          <div class="stat-card stat-red">
+            <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="stat-info"><span class="stat-value" id="statLowStock">0</span><span class="stat-label">Low Stock Alerts</span></div>
+          </div>
+          <div class="stat-card stat-purple">
+            <div class="stat-icon"><i class="fas fa-building"></i></div>
+            <div class="stat-info"><span class="stat-value" id="statTotalClients">0</span><span class="stat-label">Total Clients</span></div>
+          </div>
+        </div>
+        <div class="charts-row">
+          <div class="card chart-card">
+            <h3><i class="fas fa-chart-bar"></i> Stock Levels</h3>
+            <canvas id="stockChart"></canvas>
+          </div>
+          <div class="card chart-card">
+            <h3><i class="fas fa-chart-line"></i> Monthly Activity</h3>
+            <canvas id="activityChart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <h3><i class="fas fa-clock"></i> Recent Transactions</h3>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Date</th><th>PPE Item</th><th>Type</th><th>Qty</th><th>Client</th><th>Person</th></tr></thead>
+              <tbody id="dashRecentTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ PPE INVENTORY ============ -->
+      <div id="page-inventory" class="page">
+        <div class="page-header">
+          <h1><i class="fas fa-hard-hat"></i> PPE Inventory</h1>
+          <button class="btn btn-primary" onclick="showPPEForm()"><i class="fas fa-plus"></i> Add PPE Item</button>
+        </div>
+        <div class="card">
+          <div class="toolbar">
+            <div class="search-box">
+              <i class="fas fa-search"></i>
+              <input type="text" id="ppeSearch" placeholder="Search PPE items..." oninput="loadPPE()">
+            </div>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>ID</th><th>PPE Name</th><th>Category</th><th>Unit</th><th>Current Stock</th><th>Min Stock</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="ppeTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ INCOMING PPE ============ -->
+      <div id="page-incoming" class="page">
+        <div class="page-header">
+          <h1><i class="fas fa-truck-loading"></i> Incoming PPE</h1>
+          <button class="btn btn-primary" onclick="showIncomingForm()"><i class="fas fa-plus"></i> Record Delivery</button>
+        </div>
+        <div class="card">
+          <div class="table-container">
+            <table>
+              <thead><tr><th>ID</th><th>Date</th><th>PPE Item</th><th>Qty</th><th>Supplier</th><th>Received By</th><th>Remarks</th></tr></thead>
+              <tbody id="incomingTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ PPE DISTRIBUTION ============ -->
+      <div id="page-distribution" class="page">
+        <div class="page-header">
+          <h1><i class="fas fa-share-square"></i> PPE Distribution</h1>
+          <button class="btn btn-primary" onclick="showDistributionForm()"><i class="fas fa-plus"></i> Issue PPE</button>
+        </div>
+        <div class="card">
+          <div class="table-container">
+            <table>
+              <thead><tr><th>ID</th><th>Date</th><th>Client</th><th>PPE Item</th><th>Qty</th><th>Issued By</th><th>Remarks</th></tr></thead>
+              <tbody id="distributionTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ CLIENTS ============ -->
+      <div id="page-clients" class="page">
+        <div class="page-header">
+          <h1><i class="fas fa-building"></i> Client Companies</h1>
+          <button class="btn btn-primary" onclick="showClientForm()"><i class="fas fa-plus"></i> Add Client</button>
+        </div>
+        <div class="card">
+          <div class="table-container">
+            <table>
+              <thead><tr><th>ID</th><th>Company Name</th><th>Contact Person</th><th>Contact No.</th><th>Location</th><th>Date Added</th><th>Actions</th></tr></thead>
+              <tbody id="clientsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ TRANSACTIONS ============ -->
+      <div id="page-transactions" class="page">
+        <div class="page-header">
+          <h1><i class="fas fa-history"></i> Transaction History</h1>
+        </div>
+        <div class="card">
+          <div class="toolbar filters-bar">
+            <div class="search-box">
+              <i class="fas fa-search"></i>
+              <input type="text" id="txnSearch" placeholder="Search transactions..." oninput="loadTransactions()">
+            </div>
+            <select id="txnType" onchange="loadTransactions()">
+              <option value="">All Types</option>
+              <option value="IN">IN (Received)</option>
+              <option value="OUT">OUT (Issued)</option>
+            </select>
+            <input type="date" id="txnDateFrom" onchange="loadTransactions()" title="From Date">
+            <input type="date" id="txnDateTo" onchange="loadTransactions()" title="To Date">
+          </div>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>ID</th><th>Date</th><th>PPE Item</th><th>Type</th><th>Qty</th><th>Client</th><th>Person</th><th>Remarks</th></tr></thead>
+              <tbody id="transactionsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ REPORTS ============ -->
+      <div id="page-reports" class="page">
+        <div class="page-header">
+          <h1><i class="fas fa-chart-bar"></i> Reports</h1>
+        </div>
+        <div class="reports-grid">
+          <div class="report-card" onclick="generateReport('inventory')">
+            <div class="report-icon"><i class="fas fa-clipboard-list"></i></div>
+            <h3>PPE Inventory Summary</h3>
+            <p>Complete list of all PPE items with current stock levels</p>
+            <div class="report-actions">
+              <button class="btn btn-sm btn-excel" onclick="event.stopPropagation(); downloadExcel('inventory')"><i class="fas fa-file-excel"></i> Excel</button>
+              <button class="btn btn-sm btn-pdf" onclick="event.stopPropagation(); downloadPDF('inventory')"><i class="fas fa-file-pdf"></i> PDF</button>
+            </div>
+          </div>
+          <div class="report-card" onclick="generateReport('received')">
+            <div class="report-icon"><i class="fas fa-truck-loading"></i></div>
+            <h3>PPE Received History</h3>
+            <p>All PPE deliveries received at the warehouse</p>
+            <div class="report-actions">
+              <button class="btn btn-sm btn-excel" onclick="event.stopPropagation(); downloadExcel('received')"><i class="fas fa-file-excel"></i> Excel</button>
+              <button class="btn btn-sm btn-pdf" onclick="event.stopPropagation(); downloadPDF('received')"><i class="fas fa-file-pdf"></i> PDF</button>
+            </div>
+          </div>
+          <div class="report-card" onclick="generateReport('issued')">
+            <div class="report-icon"><i class="fas fa-share-square"></i></div>
+            <h3>PPE Issued to Clients</h3>
+            <p>All PPE distributed to client companies</p>
+            <div class="report-actions">
+              <button class="btn btn-sm btn-excel" onclick="event.stopPropagation(); downloadExcel('issued')"><i class="fas fa-file-excel"></i> Excel</button>
+              <button class="btn btn-sm btn-pdf" onclick="event.stopPropagation(); downloadPDF('issued')"><i class="fas fa-file-pdf"></i> PDF</button>
+            </div>
+          </div>
+        </div>
+        <div class="card" id="reportPreview" style="display:none;">
+          <div class="report-preview-header">
+            <h3 id="reportPreviewTitle"></h3>
+            <button class="btn btn-sm" onclick="document.getElementById('reportPreview').style.display='none'"><i class="fas fa-times"></i> Close</button>
+          </div>
+          <div class="table-container" id="reportPreviewTable"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" class="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle"></h3>
+        <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
