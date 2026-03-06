@@ -2,7 +2,7 @@
   "name": "taascor-ppe-inventory",
   "version": "1.0.0",
   "description": "TAASCOR PPE Inventory Management System",
-  "main": "main.js",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "server": "node server.js",
