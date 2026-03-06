@@ -1,21 +1,31 @@
 const path = require('path');
 const { startServer } = require('./server');
 
-// Try to load Electron — if not available (cloud/server mode), just run the Express server
+// Detect if we can actually use Electron (won't work on cloud/headless servers)
 let electronApp, BrowserWindow;
 try {
     const electron = require('electron');
-    electronApp = electron.app;
-    BrowserWindow = electron.BrowserWindow;
+    if (electron && electron.app) {
+        electronApp = electron.app;
+        BrowserWindow = electron.BrowserWindow;
+    }
 } catch (e) {
-    // Electron not installed (running on cloud like Render)
-    console.log('Running in server-only mode (no Electron)...');
-    startServer().then(() => {
-        console.log('TAASCOR PPE Inventory is running!');
-    });
+    // Electron not installed
 }
 
-if (electronApp) {
+// CLOUD / SERVER MODE — no Electron available
+if (!electronApp) {
+    console.log('Starting in server-only mode...');
+    startServer()
+        .then(() => {
+            console.log('TAASCOR PPE Inventory is running!');
+        })
+        .catch((err) => {
+            console.error('Failed to start server:', err);
+            process.exit(1);
+        });
+} else {
+    // DESKTOP MODE — Electron available
     let mainWindow;
 
     async function createWindow() {
