@@ -1,8 +1,3 @@
-databases:
-  - name: taascor-ppe-db
-    databaseName: taascor_ppe
-    plan: free
-
 services:
   - type: web
     name: taascor-ppe-inventory
@@ -13,7 +8,7 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: taascor-ppe-db
+          name: taascor-db
           property: connectionString
       - key: NODE_ENV
         value: production
