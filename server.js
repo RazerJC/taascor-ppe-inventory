@@ -301,6 +301,41 @@ app.get('/api/transactions', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/transactions', async (req, res) => {
+  const { ppe_id, transaction_type, quantity, client_id, date, responsible_person, remarks } = req.body;
+  const qty = parseInt(quantity);
+  if (qty <= 0) return res.json({ success: false, message: 'Quantity must be greater than 0' });
+  if (!['IN', 'OUT'].includes(transaction_type)) return res.json({ success: false, message: 'Invalid transaction type' });
+  try {
+    const ppeResult = await pool.query('SELECT * FROM ppe_items WHERE id = $1', [ppe_id]);
+    if (ppeResult.rows.length === 0) return res.json({ success: false, message: 'PPE item not found' });
+    const ppe = ppeResult.rows[0];
+    if (transaction_type === 'OUT' && ppe.current_stock < qty) {
+      return res.json({ success: false, message: `Insufficient stock. Available: ${ppe.current_stock} ${ppe.unit}` });
+    }
+    await pool.query(
+      'INSERT INTO transactions (ppe_id, transaction_type, quantity, client_id, date, responsible_person, remarks) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [ppe_id, transaction_type, qty, client_id || null, date, responsible_person, remarks]
+    );
+    const stockChange = transaction_type === 'IN' ? qty : -qty;
+    await pool.query('UPDATE ppe_items SET current_stock = current_stock + $1 WHERE id = $2', [stockChange, ppe_id]);
+    res.json({ success: true });
+  } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
+app.delete('/api/transactions/:id', async (req, res) => {
+  try {
+    const txn = await pool.query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
+    if (txn.rows.length === 0) return res.json({ success: false, message: 'Transaction not found' });
+    const t = txn.rows[0];
+    // Reverse the stock change
+    const reverseChange = t.transaction_type === 'IN' ? -t.quantity : t.quantity;
+    await pool.query('UPDATE ppe_items SET current_stock = current_stock + $1 WHERE id = $2', [reverseChange, t.ppe_id]);
+    await pool.query('DELETE FROM transactions WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.json({ success: false, message: e.message }); }
+});
+
 // ==================== REPORTS API ====================
 app.get('/api/reports/inventory', async (req, res) => {
   try {

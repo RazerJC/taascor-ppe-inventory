@@ -700,7 +700,7 @@ async function loadTransactions() {
     if (!items) return;
     const tbody = document.getElementById('transactionsTable');
     if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><i class="fas fa-history"></i><p>No transactions found.</p></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><i class="fas fa-history"></i><p>No transactions found.</p></td></tr>';
     } else {
         tbody.innerHTML = items.map(t => `
       <tr>
@@ -712,8 +712,117 @@ async function loadTransactions() {
         <td>${t.company_name || '-'}</td>
         <td>${t.responsible_person || '-'}</td>
         <td>${t.remarks || '-'}</td>
+        <td>
+          <button class="btn-icon danger" onclick="deleteTransaction(${t.id}, '${(t.ppe_name || '').replace(/'/g, "\\'")}', '${t.transaction_type}', ${t.quantity})" title="Delete"><i class="fas fa-trash"></i></button>
+        </td>
       </tr>
     `).join('');
+    }
+}
+
+async function showTransactionForm() {
+    const [ppeItems, clients] = await Promise.all([api('/api/ppe'), api('/api/clients')]);
+    if (!ppeItems || ppeItems.length === 0) { showToast('Please add PPE items first', 'warning'); return; }
+    const today = new Date().toISOString().slice(0, 10);
+    openModal('Add Transaction', `
+    <form onsubmit="saveTransaction(event)">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Date *</label>
+          <input type="date" id="txnFormDate" required value="${today}">
+        </div>
+        <div class="form-group">
+          <label>Type *</label>
+          <select id="txnFormType" required>
+            <option value="IN">↓ IN (Received)</option>
+            <option value="OUT">↑ OUT (Issued)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>PPE Item *</label>
+          <select id="txnFormPPE" required>
+            <option value="">Select PPE</option>
+            ${ppeItems.map(p => `<option value="${p.id}">${p.ppe_name}${p.size ? ' (' + p.size + ')' : ''} — Stock: ${p.current_stock}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Quantity *</label>
+          <input type="number" id="txnFormQty" min="1" required placeholder="e.g., 10">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Client (optional)</label>
+          <select id="txnFormClient">
+            <option value="">No Client</option>
+            ${(clients || []).map(c => `<option value="${c.id}">${c.company_name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Responsible Person</label>
+          <input type="text" id="txnFormPerson" placeholder="Staff name">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Remarks</label>
+        <textarea id="txnFormRemarks" placeholder="Additional notes..."></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn" onclick="closeModal()" style="background:var(--bg-secondary)">Cancel</button>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Add Transaction</button>
+      </div>
+    </form>
+  `);
+}
+
+async function saveTransaction(e) {
+    e.preventDefault();
+    const res = await api('/api/transactions', {
+        method: 'POST',
+        body: {
+            date: document.getElementById('txnFormDate').value,
+            transaction_type: document.getElementById('txnFormType').value,
+            ppe_id: parseInt(document.getElementById('txnFormPPE').value),
+            quantity: parseInt(document.getElementById('txnFormQty').value),
+            client_id: document.getElementById('txnFormClient').value || null,
+            responsible_person: document.getElementById('txnFormPerson').value,
+            remarks: document.getElementById('txnFormRemarks').value
+        }
+    });
+    if (res?.success) {
+        closeModal();
+        showToast('Transaction added! Stock updated.');
+        loadTransactions();
+    } else {
+        showToast(res?.message || 'Error adding transaction', 'error');
+    }
+}
+
+function deleteTransaction(id, ppeName, type, qty) {
+    openModal('Delete Transaction', `
+    <div style="text-align:center; padding: 20px 0;">
+      <i class="fas fa-exclamation-triangle" style="font-size:3rem; color:var(--accent-red); margin-bottom:16px;"></i>
+      <p style="margin-bottom:8px;">Are you sure you want to delete this transaction?</p>
+      <p style="font-weight:700; font-size:1.1rem; margin-bottom:8px;">"${ppeName}" — ${type} ${qty} units</p>
+      <p style="color:var(--accent-yellow); font-size:0.85rem; margin-bottom:20px;"><i class="fas fa-info-circle"></i> Stock will be automatically reversed.</p>
+      <div class="form-actions" style="justify-content:center; margin-top:24px;">
+        <button class="btn" onclick="closeModal()" style="background:var(--bg-secondary)">Cancel</button>
+        <button class="btn btn-danger" onclick="confirmDeleteTransaction(${id})"><i class="fas fa-trash"></i> Delete</button>
+      </div>
+    </div>
+  `);
+}
+
+async function confirmDeleteTransaction(id) {
+    const res = await api(`/api/transactions/${id}`, { method: 'DELETE' });
+    if (res?.success) {
+        closeModal();
+        showToast('Transaction deleted. Stock reversed.');
+        loadTransactions();
+    } else {
+        showToast(res?.message || 'Error deleting transaction', 'error');
     }
 }
 

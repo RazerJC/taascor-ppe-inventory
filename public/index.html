@@ -219,6 +219,7 @@
       <div id="page-transactions" class="page">
         <div class="page-header">
           <h1><i class="fas fa-history"></i> Transaction History</h1>
+          <button class="btn btn-primary" onclick="showTransactionForm()"><i class="fas fa-plus"></i> Add Transaction</button>
         </div>
         <div class="card">
           <div class="toolbar filters-bar">
@@ -236,7 +237,7 @@
           </div>
           <div class="table-container">
             <table>
-              <thead><tr><th>ID</th><th>Date</th><th>PPE Item</th><th>Type</th><th>Qty</th><th>Client</th><th>Person</th><th>Remarks</th></tr></thead>
+              <thead><tr><th>ID</th><th>Date</th><th>PPE Item</th><th>Type</th><th>Qty</th><th>Client</th><th>Person</th><th>Remarks</th><th>Actions</th></tr></thead>
               <tbody id="transactionsTable"></tbody>
             </table>
           </div>
