@@ -89,8 +89,8 @@
         <a href="#" class="nav-item" onclick="showSettings()">
           <i class="fas fa-cog"></i><span>Settings</span>
         </a>
-        <a href="#" class="nav-item" onclick="showNetworkInfo()">
-          <i class="fas fa-mobile-alt"></i><span>Phone Access</span>
+        <a href="#" class="nav-item" id="themeToggle" onclick="toggleTheme()">
+          <i class="fas fa-sun"></i><span>Toggle Theme</span>
         </a>
         <a href="#" class="nav-item" onclick="lockApp()">
           <i class="fas fa-lock"></i><span>Lock App</span>
@@ -275,6 +275,14 @@
             <div class="report-actions">
               <button class="btn btn-sm btn-excel" onclick="event.stopPropagation(); downloadExcel('issued')"><i class="fas fa-file-excel"></i> Excel</button>
               <button class="btn btn-sm btn-pdf" onclick="event.stopPropagation(); downloadPDF('issued')"><i class="fas fa-file-pdf"></i> PDF</button>
+            </div>
+          </div>
+          <div class="report-card" style="border-color:var(--accent-purple); background:linear-gradient(135deg, var(--bg-card), rgba(139,92,246,0.08))">
+            <div class="report-icon" style="background:rgba(139,92,246,0.15); color:var(--accent-purple)"><i class="fas fa-layer-group"></i></div>
+            <h3>Combined Report (All)</h3>
+            <p>Inventory + Received + Issued in one file</p>
+            <div class="report-actions">
+              <button class="btn btn-sm btn-excel" onclick="event.stopPropagation(); downloadExcel('combined')"><i class="fas fa-file-excel"></i> Excel (All Sheets)</button>
             </div>
           </div>
         </div>

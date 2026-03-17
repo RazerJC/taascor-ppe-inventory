@@ -229,21 +229,40 @@ app.get('/api/incoming', async (req, res) => {
 });
 
 app.post('/api/incoming', async (req, res) => {
-  const { date_received, ppe_id, quantity, supplier, received_by, remarks } = req.body;
+  const { date_received, ppe_id, ppe_name, category, size, quantity, supplier, received_by, remarks } = req.body;
   const qty = parseInt(quantity);
   if (qty <= 0) return res.json({ success: false, message: 'Quantity must be greater than 0' });
   try {
-    const ppeResult = await pool.query('SELECT * FROM ppe_items WHERE id = $1', [ppe_id]);
+    let actualPpeId = ppe_id;
+    // If ppe_name provided (new item not in inventory), auto-create
+    if (ppe_name && !ppe_id) {
+      let existing;
+      if (size) {
+        existing = await pool.query('SELECT * FROM ppe_items WHERE LOWER(ppe_name) = LOWER($1) AND LOWER(COALESCE(size,$$$$)) = LOWER($2)', [ppe_name.trim(), size]);
+      } else {
+        existing = await pool.query('SELECT * FROM ppe_items WHERE LOWER(ppe_name) = LOWER($1) AND size IS NULL', [ppe_name.trim()]);
+      }
+      if (existing.rows.length > 0) {
+        actualPpeId = existing.rows[0].id;
+      } else {
+        const newPpe = await pool.query(
+          'INSERT INTO ppe_items (ppe_name, category, size, unit, current_stock, minimum_stock) VALUES ($1, $2, $3, $4, 0, 10) RETURNING id',
+          [ppe_name.trim(), category || 'Other', size || null, 'pcs']
+        );
+        actualPpeId = newPpe.rows[0].id;
+      }
+    }
+    if (!actualPpeId) return res.json({ success: false, message: 'Please select a PPE item or enter a new name' });
+    const ppeResult = await pool.query('SELECT * FROM ppe_items WHERE id = $1', [actualPpeId]);
     if (ppeResult.rows.length === 0) return res.json({ success: false, message: 'PPE item not found' });
-    
     await pool.query(
       'INSERT INTO incoming_ppe (date_received, ppe_id, quantity, supplier, received_by, remarks) VALUES ($1, $2, $3, $4, $5, $6)',
-      [date_received, ppe_id, qty, supplier, received_by, remarks]
+      [date_received, actualPpeId, qty, supplier, received_by, remarks]
     );
-    await pool.query('UPDATE ppe_items SET current_stock = current_stock + $1 WHERE id = $2', [qty, ppe_id]);
+    await pool.query('UPDATE ppe_items SET current_stock = current_stock + $1 WHERE id = $2', [qty, actualPpeId]);
     await pool.query(
       'INSERT INTO transactions (ppe_id, transaction_type, quantity, date, responsible_person, remarks) VALUES ($1, $2, $3, $4, $5, $6)',
-      [ppe_id, 'IN', qty, date_received, received_by, remarks]
+      [actualPpeId, 'IN', qty, date_received, received_by, remarks]
     );
     res.json({ success: true });
   } catch (e) { res.json({ success: false, message: e.message }); }
@@ -418,6 +437,36 @@ app.get('/api/reports/excel/:type', async (req, res) => {
         row.eachCell(c => { c.border = cellBorder; c.alignment = { vertical: 'middle' }; });
       });
       ws.columns.forEach(c => { c.width = 18; });
+    } else if (type === 'combined') {
+      // Sheet 1: Inventory
+      const ws1 = workbook.addWorksheet('PPE Inventory');
+      addCompanyHeader(ws1, 'PPE Inventory Summary', 'H');
+      const r1 = ws1.addRow(['ID', 'PPE Name', 'Category', 'Size', 'Unit', 'Current Stock', 'Min Stock', 'Status']);
+      r1.eachCell(c => { c.font = headerStyle.font; c.fill = headerStyle.fill; c.alignment = headerStyle.alignment; c.border = headerStyle.border; });
+      (await pool.query('SELECT * FROM ppe_items ORDER BY ppe_name')).rows.forEach(item => {
+        const status = item.current_stock <= item.minimum_stock ? '⚠ LOW STOCK' : '✓ OK';
+        const row = ws1.addRow([item.id, item.ppe_name, item.category, item.size || '-', item.unit, item.current_stock, item.minimum_stock, status]);
+        row.eachCell(c => { c.border = cellBorder; c.alignment = { vertical: 'middle' }; });
+      });
+      ws1.columns.forEach(c => { c.width = 18; }); ws1.getColumn(2).width = 30;
+      // Sheet 2: Received
+      const ws2 = workbook.addWorksheet('Received History');
+      addCompanyHeader(ws2, 'PPE Received History', 'G');
+      const r2 = ws2.addRow(['ID', 'Date', 'PPE Item', 'Quantity', 'Supplier', 'Received By', 'Remarks']);
+      r2.eachCell(c => { c.font = headerStyle.font; c.fill = headerStyle.fill; c.alignment = headerStyle.alignment; c.border = headerStyle.border; });
+      (await pool.query('SELECT i.*, p.ppe_name FROM incoming_ppe i LEFT JOIN ppe_items p ON i.ppe_id = p.id ORDER BY i.date_received DESC')).rows.forEach(item => {
+        ws2.addRow([item.id, item.date_received, item.ppe_name, item.quantity, item.supplier, item.received_by, item.remarks]).eachCell(c => { c.border = cellBorder; });
+      });
+      ws2.columns.forEach(c => { c.width = 18; });
+      // Sheet 3: Issued
+      const ws3 = workbook.addWorksheet('Issued to Clients');
+      addCompanyHeader(ws3, 'PPE Issued to Clients', 'G');
+      const r3 = ws3.addRow(['ID', 'Date', 'Client', 'PPE Item', 'Quantity', 'Issued By', 'Remarks']);
+      r3.eachCell(c => { c.font = headerStyle.font; c.fill = headerStyle.fill; c.alignment = headerStyle.alignment; c.border = headerStyle.border; });
+      (await pool.query('SELECT d.*, p.ppe_name, c.company_name FROM distribution d LEFT JOIN ppe_items p ON d.ppe_id = p.id LEFT JOIN clients c ON d.client_id = c.id ORDER BY d.date_issued DESC')).rows.forEach(item => {
+        ws3.addRow([item.id, item.date_issued, item.company_name, item.ppe_name, item.quantity, item.issued_by, item.remarks]).eachCell(c => { c.border = cellBorder; });
+      });
+      ws3.columns.forEach(c => { c.width = 18; });
     }
   } catch (e) { return res.status(500).json({ error: e.message }); }
 

@@ -256,11 +256,20 @@ async function loadPPE() {
 }
 
 const SIZE_CATEGORIES = ['Uniform', 'Body Protection', 'Foot Protection', 'Hand Protection', 'High Visibility'];
-const ALL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL'];
+const APPAREL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL'];
+const SHOE_SIZES = ['5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10', '10.5', '11', '11.5', '12', '13', '14'];
+const GLOVE_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+
+function getSizesForCategory(cat) {
+    if (cat === 'Foot Protection') return SHOE_SIZES;
+    if (cat === 'Hand Protection') return GLOVE_SIZES;
+    return APPAREL_SIZES;
+}
 
 function showPPEForm(item = null) {
     const isEdit = item !== null;
     const showSize = isEdit && item.category && SIZE_CATEGORIES.includes(item.category);
+    const currentSizes = showSize ? getSizesForCategory(item.category) : APPAREL_SIZES;
     openModal(isEdit ? 'Edit PPE Item' : 'Add New PPE Item', `
     <form onsubmit="savePPE(event, ${isEdit ? item.id : 'null'})">
       <div class="form-row">
@@ -291,7 +300,7 @@ function showPPEForm(item = null) {
           <label><i class="fas fa-ruler"></i> Size</label>
           <select id="ppeSize">
             <option value="">Select Size</option>
-            ${ALL_SIZES.map(s => `<option ${isEdit && item.size === s ? 'selected' : ''}>${s}</option>`).join('')}
+            ${(showSize ? currentSizes : APPAREL_SIZES).map(s => `<option ${isEdit && item.size === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -327,8 +336,14 @@ function toggleSizeField() {
     const cat = document.getElementById('ppeCategory').value;
     const sizeRow = document.getElementById('sizeRow');
     if (sizeRow) {
-        sizeRow.style.display = SIZE_CATEGORIES.includes(cat) ? 'flex' : 'none';
-        if (!SIZE_CATEGORIES.includes(cat)) {
+        const show = SIZE_CATEGORIES.includes(cat);
+        sizeRow.style.display = show ? 'flex' : 'none';
+        if (show) {
+            const sizeSelect = document.getElementById('ppeSize');
+            const sizes = getSizesForCategory(cat);
+            const currentVal = sizeSelect.value;
+            sizeSelect.innerHTML = '<option value="">Select Size</option>' + sizes.map(s => `<option ${s === currentVal ? 'selected' : ''}>${s}</option>`).join('');
+        } else {
             const sizeSelect = document.getElementById('ppeSize');
             if (sizeSelect) sizeSelect.value = '';
         }
@@ -413,11 +428,8 @@ async function loadIncoming() {
 
 async function showIncomingForm() {
     const ppeItems = await api('/api/ppe');
-    if (!ppeItems || ppeItems.length === 0) {
-        showToast('Please add PPE items first', 'warning');
-        return;
-    }
     const today = new Date().toISOString().slice(0, 10);
+    const categories = ['Uniform','Head Protection','Eye Protection','Hearing Protection','Respiratory Protection','Hand Protection','Foot Protection','Body Protection','Fall Protection','High Visibility','Other'];
     openModal('Record PPE Delivery', `
     <form onsubmit="saveIncoming(event)">
       <div class="form-row">
@@ -426,10 +438,38 @@ async function showIncomingForm() {
           <input type="date" id="inDate" required value="${today}">
         </div>
         <div class="form-group">
-          <label>PPE Item *</label>
-          <select id="inPPE" required>
-            <option value="">Select PPE</option>
-            ${ppeItems.map(p => `<option value="${p.id}">${p.ppe_name} (Stock: ${p.current_stock})</option>`).join('')}
+          <label>PPE Source *</label>
+          <select id="inMode" onchange="toggleIncomingMode()">
+            <option value="existing">Select Existing PPE</option>
+            <option value="new">Add New PPE Item</option>
+          </select>
+        </div>
+      </div>
+      <div id="inExistingRow" class="form-group">
+        <label>PPE Item *</label>
+        <select id="inPPE">
+          <option value="">Select PPE</option>
+          ${(ppeItems || []).map(p => `<option value="${p.id}">${p.ppe_name}${p.size ? ' (' + p.size + ')' : ''} — Stock: ${p.current_stock}</option>`).join('')}
+        </select>
+      </div>
+      <div id="inNewRow" style="display:none">
+        <div class="form-row">
+          <div class="form-group">
+            <label>New PPE Name *</label>
+            <input type="text" id="inNewName" placeholder="e.g., Safety Shoes, Company Polo">
+          </div>
+          <div class="form-group">
+            <label>Category *</label>
+            <select id="inNewCategory" onchange="toggleIncomingSizeField()">
+              <option value="">Select Category</option>
+              ${categories.map(c => `<option>${c}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-group" id="inSizeRow" style="display:none">
+          <label><i class="fas fa-ruler"></i> Size</label>
+          <select id="inNewSize">
+            <option value="">Select Size</option>
           </select>
         </div>
       </div>
@@ -459,22 +499,48 @@ async function showIncomingForm() {
   `);
 }
 
+function toggleIncomingMode() {
+    const mode = document.getElementById('inMode').value;
+    document.getElementById('inExistingRow').style.display = mode === 'existing' ? 'block' : 'none';
+    document.getElementById('inNewRow').style.display = mode === 'new' ? 'block' : 'none';
+}
+
+function toggleIncomingSizeField() {
+    const cat = document.getElementById('inNewCategory').value;
+    const sizeRow = document.getElementById('inSizeRow');
+    const show = SIZE_CATEGORIES.includes(cat);
+    sizeRow.style.display = show ? 'block' : 'none';
+    if (show) {
+        const sizes = getSizesForCategory(cat);
+        document.getElementById('inNewSize').innerHTML = '<option value="">Select Size</option>' + sizes.map(s => `<option>${s}</option>`).join('');
+    }
+}
+
 async function saveIncoming(e) {
     e.preventDefault();
-    const res = await api('/api/incoming', {
-        method: 'POST',
-        body: {
-            date_received: document.getElementById('inDate').value,
-            ppe_id: parseInt(document.getElementById('inPPE').value),
-            quantity: parseInt(document.getElementById('inQty').value),
-            supplier: document.getElementById('inSupplier').value,
-            received_by: document.getElementById('inReceivedBy').value,
-            remarks: document.getElementById('inRemarks').value
-        }
-    });
+    const mode = document.getElementById('inMode').value;
+    const body = {
+        date_received: document.getElementById('inDate').value,
+        quantity: parseInt(document.getElementById('inQty').value),
+        supplier: document.getElementById('inSupplier').value,
+        received_by: document.getElementById('inReceivedBy').value,
+        remarks: document.getElementById('inRemarks').value
+    };
+    if (mode === 'existing') {
+        const ppeId = document.getElementById('inPPE').value;
+        if (!ppeId) { showToast('Please select a PPE item', 'warning'); return; }
+        body.ppe_id = parseInt(ppeId);
+    } else {
+        const name = document.getElementById('inNewName').value.trim();
+        if (!name) { showToast('Please enter PPE name', 'warning'); return; }
+        body.ppe_name = name;
+        body.category = document.getElementById('inNewCategory').value || 'Other';
+        body.size = document.getElementById('inNewSize')?.value || null;
+    }
+    const res = await api('/api/incoming', { method: 'POST', body });
     if (res?.success) {
         closeModal();
-        showToast('Delivery recorded! Stock updated.');
+        showToast(mode === 'new' ? 'Delivery recorded! New PPE item created in inventory.' : 'Delivery recorded! Stock updated.');
         loadIncoming();
     } else {
         showToast(res?.message || 'Error recording delivery', 'error');
@@ -960,20 +1026,24 @@ async function changePin(e) {
 }
 
 // ============ NETWORK INFO ============
-async function showNetworkInfo() {
-    const info = await api('/api/network-info');
-    if (!info) return;
-    const urls = info.addresses.map(a => `<div class="url-box">http://${a.address}:${info.port}</div>`).join('');
-    openModal('📱 Phone Access', `
-    <div class="network-info">
-      <p style="margin-bottom:12px; color:var(--text-secondary);">Connect your phone to the <strong>same WiFi network</strong> as this PC, then open this URL in your phone's browser:</p>
-      ${urls || '<p style="color:var(--accent-red);">No network interfaces found. Make sure your PC is connected to WiFi.</p>'}
-      <p style="margin-top:16px; color:var(--text-muted); font-size:0.85rem;">The PC must be running for phone access to work.</p>
-    </div>
-  `);
+// Removed - not needed for online deployment
+
+// ============ THEME TOGGLE ============
+function toggleTheme() {
+    const body = document.body;
+    const isLight = body.classList.toggle('light-theme');
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    const icon = document.querySelector('#themeToggle i');
+    if (icon) icon.className = isLight ? 'fas fa-moon' : 'fas fa-sun';
 }
 
 // ============ INIT ============
 document.addEventListener('DOMContentLoaded', () => {
-    // Page is ready, PIN lock is showing
+    // Load saved theme
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-theme');
+        const icon = document.querySelector('#themeToggle i');
+        if (icon) icon.className = 'fas fa-moon';
+    }
 });
