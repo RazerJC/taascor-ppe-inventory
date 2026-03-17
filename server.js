@@ -26,11 +26,14 @@ async function initDB() {
       id SERIAL PRIMARY KEY,
       ppe_name TEXT NOT NULL,
       category TEXT NOT NULL,
+      size TEXT DEFAULT NULL,
       unit TEXT NOT NULL DEFAULT 'pcs',
       current_stock INTEGER NOT NULL DEFAULT 0,
       minimum_stock INTEGER NOT NULL DEFAULT 10,
       date_added DATE NOT NULL DEFAULT CURRENT_DATE
     )`);
+    // Add size column if it doesn't exist (for existing databases)
+    await client.query(`DO $$ BEGIN ALTER TABLE ppe_items ADD COLUMN size TEXT DEFAULT NULL; EXCEPTION WHEN duplicate_column THEN NULL; END $$`);
     await client.query(`CREATE TABLE IF NOT EXISTS clients (
       id SERIAL PRIMARY KEY,
       company_name TEXT NOT NULL,
@@ -142,22 +145,22 @@ app.get('/api/ppe/:id', async (req, res) => {
 });
 
 app.post('/api/ppe', async (req, res) => {
-  const { ppe_name, category, unit, current_stock, minimum_stock } = req.body;
+  const { ppe_name, category, size, unit, current_stock, minimum_stock } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO ppe_items (ppe_name, category, unit, current_stock, minimum_stock) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [ppe_name, category, unit || 'pcs', current_stock || 0, minimum_stock || 10]
+      'INSERT INTO ppe_items (ppe_name, category, size, unit, current_stock, minimum_stock) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+      [ppe_name, category, size || null, unit || 'pcs', current_stock || 0, minimum_stock || 10]
     );
     res.json({ success: true, id: result.rows[0].id });
   } catch (e) { res.json({ success: false, message: e.message }); }
 });
 
 app.put('/api/ppe/:id', async (req, res) => {
-  const { ppe_name, category, unit, current_stock, minimum_stock } = req.body;
+  const { ppe_name, category, size, unit, current_stock, minimum_stock } = req.body;
   try {
     await pool.query(
-      'UPDATE ppe_items SET ppe_name=$1, category=$2, unit=$3, current_stock=$4, minimum_stock=$5 WHERE id=$6',
-      [ppe_name, category, unit, current_stock, minimum_stock, req.params.id]
+      'UPDATE ppe_items SET ppe_name=$1, category=$2, size=$3, unit=$4, current_stock=$5, minimum_stock=$6 WHERE id=$7',
+      [ppe_name, category, size || null, unit, current_stock, minimum_stock, req.params.id]
     );
     res.json({ success: true });
   } catch (e) { res.json({ success: false, message: e.message }); }

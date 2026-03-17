@@ -234,13 +234,14 @@ async function loadPPE() {
     if (!items) return;
     const tbody = document.getElementById('ppeTable');
     if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><i class="fas fa-hard-hat"></i><p>No PPE items found. Click "Add PPE Item" to get started.</p></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><i class="fas fa-hard-hat"></i><p>No PPE items found. Click "Add PPE Item" to get started.</p></td></tr>';
     } else {
         tbody.innerHTML = items.map(i => `
       <tr>
         <td><strong>#${i.id}</strong></td>
         <td>${i.ppe_name}</td>
         <td>${i.category}</td>
+        <td>${i.size || '-'}</td>
         <td>${i.unit}</td>
         <td><strong>${i.current_stock}</strong></td>
         <td>${i.minimum_stock}</td>
@@ -254,19 +255,24 @@ async function loadPPE() {
     }
 }
 
+const SIZE_CATEGORIES = ['Uniform', 'Body Protection', 'Foot Protection', 'Hand Protection', 'High Visibility'];
+const ALL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '5XL'];
+
 function showPPEForm(item = null) {
     const isEdit = item !== null;
+    const showSize = isEdit && item.category && SIZE_CATEGORIES.includes(item.category);
     openModal(isEdit ? 'Edit PPE Item' : 'Add New PPE Item', `
     <form onsubmit="savePPE(event, ${isEdit ? item.id : 'null'})">
       <div class="form-row">
         <div class="form-group">
           <label>PPE Name *</label>
-          <input type="text" id="ppeName" required value="${isEdit ? item.ppe_name : ''}" placeholder="e.g., Safety Helmet">
+          <input type="text" id="ppeName" required value="${isEdit ? item.ppe_name : ''}" placeholder="e.g., Safety Helmet, T-Shirt, Polo">
         </div>
         <div class="form-group">
           <label>Category *</label>
-          <select id="ppeCategory" required>
+          <select id="ppeCategory" required onchange="toggleSizeField()">
             <option value="">Select Category</option>
+            <option ${isEdit && item.category === 'Uniform' ? 'selected' : ''}>Uniform</option>
             <option ${isEdit && item.category === 'Head Protection' ? 'selected' : ''}>Head Protection</option>
             <option ${isEdit && item.category === 'Eye Protection' ? 'selected' : ''}>Eye Protection</option>
             <option ${isEdit && item.category === 'Hearing Protection' ? 'selected' : ''}>Hearing Protection</option>
@@ -277,6 +283,15 @@ function showPPEForm(item = null) {
             <option ${isEdit && item.category === 'Fall Protection' ? 'selected' : ''}>Fall Protection</option>
             <option ${isEdit && item.category === 'High Visibility' ? 'selected' : ''}>High Visibility</option>
             <option ${isEdit && item.category === 'Other' ? 'selected' : ''}>Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row" id="sizeRow" style="display:${showSize ? 'flex' : 'none'}">
+        <div class="form-group" style="width:100%">
+          <label><i class="fas fa-ruler"></i> Size</label>
+          <select id="ppeSize">
+            <option value="">Select Size</option>
+            ${ALL_SIZES.map(s => `<option ${isEdit && item.size === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -308,11 +323,25 @@ function showPPEForm(item = null) {
   `);
 }
 
+function toggleSizeField() {
+    const cat = document.getElementById('ppeCategory').value;
+    const sizeRow = document.getElementById('sizeRow');
+    if (sizeRow) {
+        sizeRow.style.display = SIZE_CATEGORIES.includes(cat) ? 'flex' : 'none';
+        if (!SIZE_CATEGORIES.includes(cat)) {
+            const sizeSelect = document.getElementById('ppeSize');
+            if (sizeSelect) sizeSelect.value = '';
+        }
+    }
+}
+
 async function savePPE(e, id) {
     e.preventDefault();
+    const category = document.getElementById('ppeCategory').value;
     const body = {
         ppe_name: document.getElementById('ppeName').value,
-        category: document.getElementById('ppeCategory').value,
+        category: category,
+        size: SIZE_CATEGORIES.includes(category) ? (document.getElementById('ppeSize')?.value || null) : null,
         unit: document.getElementById('ppeUnit').value,
         current_stock: parseInt(document.getElementById('ppeStock').value) || 0,
         minimum_stock: parseInt(document.getElementById('ppeMinStock').value) || 10
