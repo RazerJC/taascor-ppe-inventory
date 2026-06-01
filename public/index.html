@@ -155,11 +155,22 @@
           <button class="btn btn-primary" onclick="showPPEForm()"><i class="fas fa-plus"></i> Add PPE Item</button>
         </div>
         <div class="card">
-          <div class="toolbar">
+          <div class="toolbar filters-bar">
             <div class="search-box">
               <i class="fas fa-search"></i>
               <input type="text" id="ppeSearch" placeholder="Search PPE items..." oninput="loadPPE()">
             </div>
+            <select id="ppeCategoryFilter" onchange="loadPPE()" style="min-width:160px;">
+              <option value="">All Categories</option>
+            </select>
+            <select id="ppeSortBy" onchange="sortPPETable()" style="min-width:150px;">
+              <option value="name-asc">Name (A-Z)</option>
+              <option value="name-desc">Name (Z-A)</option>
+              <option value="category">Category</option>
+              <option value="stock-asc">Stock (Low → High)</option>
+              <option value="stock-desc">Stock (High → Low)</option>
+              <option value="status">Status (Low Stock First)</option>
+            </select>
           </div>
           <div class="table-container">
             <table>

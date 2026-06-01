@@ -284,10 +284,62 @@ async function loadDashboard() {
 }
 
 // ============ PPE INVENTORY ============
+let _ppeItemsCache = [];
+
 async function loadPPE() {
     const search = document.getElementById('ppeSearch')?.value || '';
     const items = await api(`/api/ppe?search=${encodeURIComponent(search)}`);
     if (!items) return;
+
+    // Populate category filter dropdown (only once or when items change)
+    const catFilter = document.getElementById('ppeCategoryFilter');
+    if (catFilter) {
+        const categories = [...new Set(items.map(i => i.category))].sort();
+        const currentVal = catFilter.value;
+        catFilter.innerHTML = '<option value="">All Categories</option>' +
+            categories.map(c => `<option ${c === currentVal ? 'selected' : ''}>${c}</option>`).join('');
+    }
+
+    _ppeItemsCache = items;
+    renderPPETable();
+}
+
+function renderPPETable() {
+    let items = [..._ppeItemsCache];
+
+    // Apply category filter
+    const catFilter = document.getElementById('ppeCategoryFilter')?.value || '';
+    if (catFilter) {
+        items = items.filter(i => i.category === catFilter);
+    }
+
+    // Apply sorting
+    const sortBy = document.getElementById('ppeSortBy')?.value || 'name-asc';
+    switch (sortBy) {
+        case 'name-asc':
+            items.sort((a, b) => a.ppe_name.localeCompare(b.ppe_name));
+            break;
+        case 'name-desc':
+            items.sort((a, b) => b.ppe_name.localeCompare(a.ppe_name));
+            break;
+        case 'category':
+            items.sort((a, b) => a.category.localeCompare(b.category) || a.ppe_name.localeCompare(b.ppe_name));
+            break;
+        case 'stock-asc':
+            items.sort((a, b) => a.current_stock - b.current_stock);
+            break;
+        case 'stock-desc':
+            items.sort((a, b) => b.current_stock - a.current_stock);
+            break;
+        case 'status':
+            items.sort((a, b) => {
+                const aLow = a.current_stock <= a.minimum_stock ? 0 : 1;
+                const bLow = b.current_stock <= b.minimum_stock ? 0 : 1;
+                return aLow - bLow || a.ppe_name.localeCompare(b.ppe_name);
+            });
+            break;
+    }
+
     const tbody = document.getElementById('ppeTable');
     if (items.length === 0) {
         tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><i class="fas fa-hard-hat"></i><p>No PPE items found. Click "Add PPE Item" to get started.</p></td></tr>';
@@ -296,7 +348,7 @@ async function loadPPE() {
       <tr>
         <td><strong>#${i.id}</strong></td>
         <td>${i.ppe_name}</td>
-        <td>${i.category}</td>
+        <td><span class="badge" style="background:rgba(59,130,246,0.15); color:#3b82f6; font-size:0.75rem;">${i.category}</span></td>
         <td>${i.size || '-'}</td>
         <td>${i.unit}</td>
         <td><strong>${i.current_stock}</strong></td>
@@ -309,6 +361,10 @@ async function loadPPE() {
       </tr>
     `).join('');
     }
+}
+
+function sortPPETable() {
+    renderPPETable();
 }
 
 const SIZE_CATEGORIES = ['Uniform', 'Body Protection', 'Foot Protection', 'Hand Protection', 'High Visibility'];
