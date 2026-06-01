@@ -104,7 +104,10 @@
       <div id="page-dashboard" class="page active">
         <div class="page-header">
           <h1><i class="fas fa-th-large"></i> Dashboard</h1>
-          <span class="header-date" id="currentDate"></span>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="btn" onclick="importExcel()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; font-size:0.85rem;"><i class="fas fa-file-excel"></i> Import from Excel</button>
+            <span class="header-date" id="currentDate"></span>
+          </div>
         </div>
         <div class="stats-grid">
           <div class="stat-card stat-blue">

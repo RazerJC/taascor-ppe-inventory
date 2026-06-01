@@ -142,9 +142,65 @@ async function api(url, options = {}) {
     }
 }
 
+// ============ EXCEL IMPORT ============
+async function importExcel() {
+    openModal('Import Excel Data', `
+    <div style="text-align:center; padding: 20px 0;">
+      <i class="fas fa-file-excel" style="font-size:3rem; color:#10b981; margin-bottom:16px;"></i>
+      <p style="margin-bottom:8px; font-weight:600;">Import PPE-INVENTORY-2026.xlsx</p>
+      <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:20px;">This will import all PPE items, incoming & outgoing records from the Excel file.<br><strong style="color:var(--accent-red);">Warning: Existing data will be replaced.</strong></p>
+      <div class="form-actions" style="justify-content:center;">
+        <button class="btn" onclick="closeModal()" style="background:var(--bg-secondary)">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmImportExcel()"><i class="fas fa-file-import"></i> Import Now</button>
+      </div>
+    </div>
+  `);
+}
+
+async function confirmImportExcel() {
+    document.getElementById('modalBody').innerHTML = `
+    <div style="text-align:center; padding: 40px 0;">
+      <i class="fas fa-spinner fa-spin" style="font-size:2.5rem; color:var(--accent-blue); margin-bottom:16px;"></i>
+      <p style="font-weight:600;">Importing data from Excel...</p>
+      <p style="color:var(--text-muted); font-size:0.85rem;">Please wait, this may take a moment.</p>
+    </div>
+  `;
+
+    const res = await api('/api/import-excel', { method: 'POST', body: {} });
+    if (res?.success) {
+        document.getElementById('modalBody').innerHTML = `
+      <div style="text-align:center; padding: 30px 0;">
+        <i class="fas fa-check-circle" style="font-size:3rem; color:var(--accent-green); margin-bottom:16px;"></i>
+        <p style="font-weight:600; font-size:1.1rem; margin-bottom:12px;">Import Successful!</p>
+        <div style="background:var(--bg-secondary); border-radius:12px; padding:16px; margin:0 auto; max-width:320px;">
+          <p><i class="fas fa-hard-hat"></i> <strong>${res.itemsCreated}</strong> PPE Items imported</p>
+          <p><i class="fas fa-exchange-alt"></i> <strong>${res.transactionsCreated}</strong> Transactions recorded</p>
+        </div>
+        <div class="form-actions" style="justify-content:center; margin-top:20px;">
+          <button class="btn btn-primary" onclick="closeModal(); loadDashboard();"><i class="fas fa-check"></i> Done</button>
+        </div>
+      </div>
+    `;
+        showToast('Excel data imported successfully!');
+    } else {
+        document.getElementById('modalBody').innerHTML = `
+      <div style="text-align:center; padding: 30px 0;">
+        <i class="fas fa-times-circle" style="font-size:3rem; color:var(--accent-red); margin-bottom:16px;"></i>
+        <p style="font-weight:600;">Import Failed</p>
+        <p style="color:var(--text-muted);">${res?.message || 'Unknown error'}</p>
+        <div class="form-actions" style="justify-content:center; margin-top:20px;">
+          <button class="btn" onclick="closeModal()" style="background:var(--bg-secondary)">Close</button>
+        </div>
+      </div>
+    `;
+        showToast(res?.message || 'Import failed', 'error');
+    }
+}
+
 // ============ DASHBOARD ============
 let stockChart = null;
 let activityChart = null;
+
 
 async function loadDashboard() {
     const data = await api('/api/dashboard');

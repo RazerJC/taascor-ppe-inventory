@@ -490,6 +490,212 @@ app.get('/api/network-info', (req, res) => {
   res.json({ port: PORT, addresses });
 });
 
+// ==================== EXCEL IMPORT API ====================
+app.post('/api/import-excel', async (req, res) => {
+  try {
+    const filePath = path.join(__dirname, 'PPE-INVENTORY-2026.xlsx');
+    if (!require('fs').existsSync(filePath)) {
+      return res.json({ success: false, message: 'PPE-INVENTORY-2026.xlsx not found in server directory' });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+    const ws = workbook.worksheets[0]; // SUMMARY sheet
+
+    // Parse header row 5 to find INCOMING vs OUTGOING boundaries
+    const row5 = ws.getRow(5);
+    const row7 = ws.getRow(7);
+    const incomingCols = [];
+    const outgoingCols = [];
+    const incomingDates = [];
+    const outgoingDates = [];
+
+    for (let c = 3; c <= ws.columnCount; c++) {
+      const header = row5.getCell(c).value;
+      const dateVal = row7.getCell(c).value;
+      if (header === 'INCOMING') {
+        // Check if this is the TOTAL column
+        const row6Val = ws.getRow(6).getCell(c).value;
+        if (row6Val === 'TOTAL') continue; // Skip total column
+        incomingCols.push(c);
+        incomingDates.push(_parseExcelDate(dateVal));
+      } else if (header === 'OUTGOING') {
+        const row6Val = ws.getRow(6).getCell(c).value;
+        if (row6Val === 'TOTAL') continue;
+        outgoingCols.push(c);
+        outgoingDates.push(_parseExcelDate(dateVal));
+      }
+    }
+
+    // Parse item rows
+    let currentCategory = 'APPAREL - PPE';
+    let currentParent = '';
+    const items = [];
+
+    // Known category headers
+    const categoryHeaders = ['APPAREL - PPE', 'SUPPLIES', 'POLO & PANTS (CLEANROOM)',
+      'PANTS (CLEANROOM)', 'POLO (CLEANROOM)', 'POLO SHIRT'];
+
+    for (let r = 8; r <= ws.rowCount; r++) {
+      const row = ws.getRow(r);
+      const colB = row.getCell(2).value;
+      if (!colB || typeof colB !== 'string') continue;
+      const name = colB.trim();
+      if (!name) continue;
+
+      // Check if this is a category header
+      if (categoryHeaders.includes(name.toUpperCase()) || categoryHeaders.includes(name)) {
+        currentCategory = name;
+        currentParent = '';
+        continue;
+      }
+
+      // Check if row has any numeric data in INCOMING or OUTGOING columns
+      let hasData = false;
+      let totalIncoming = 0;
+      let totalOutgoing = 0;
+      const incomingEntries = [];
+      const outgoingEntries = [];
+
+      for (let i = 0; i < incomingCols.length; i++) {
+        const val = _getNumeric(row.getCell(incomingCols[i]).value);
+        if (val > 0) {
+          hasData = true;
+          totalIncoming += val;
+          incomingEntries.push({ date: incomingDates[i], quantity: val });
+        }
+      }
+      for (let i = 0; i < outgoingCols.length; i++) {
+        const val = _getNumeric(row.getCell(outgoingCols[i]).value);
+        if (val > 0) {
+          hasData = true;
+          totalOutgoing += val;
+          outgoingEntries.push({ date: outgoingDates[i], quantity: val });
+        }
+      }
+
+      if (!hasData) {
+        // This is a parent item name (e.g., "SAFETY SHOES NEW (MIAMI)")
+        currentParent = name;
+        continue;
+      }
+
+      // This is a data row (has quantities)
+      const isSize = /^(SIZE|[XSML]{1,4}|[0-9XL]{1,4}|\d+XL|XXL|XXXL|SMALL|MEDIUM|LARGE|XLARGE)/i.test(name);
+      const ppeName = currentParent && isSize ? `${currentParent} - ${name}` : (currentParent ? `${currentParent} - ${name}` : name);
+      const size = isSize ? name : null;
+
+      items.push({
+        ppe_name: ppeName,
+        category: currentCategory,
+        size: size,
+        unit: 'pcs',
+        totalIncoming,
+        totalOutgoing,
+        currentStock: totalIncoming - totalOutgoing,
+        incomingEntries,
+        outgoingEntries,
+      });
+    }
+
+    // Now insert into database
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Clear existing data for clean re-import
+      await client.query('DELETE FROM transactions');
+      await client.query('DELETE FROM distribution');
+      await client.query('DELETE FROM incoming_ppe');
+      await client.query('DELETE FROM ppe_items');
+      // Reset sequences
+      await client.query("ALTER SEQUENCE ppe_items_id_seq RESTART WITH 1");
+      await client.query("ALTER SEQUENCE transactions_id_seq RESTART WITH 1");
+      await client.query("ALTER SEQUENCE incoming_ppe_id_seq RESTART WITH 1");
+      await client.query("ALTER SEQUENCE distribution_id_seq RESTART WITH 1");
+
+      let itemsCreated = 0;
+      let transactionsCreated = 0;
+
+      for (const item of items) {
+        // Insert PPE item
+        const ppeResult = await client.query(
+          'INSERT INTO ppe_items (ppe_name, category, size, unit, current_stock, minimum_stock) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+          [item.ppe_name, item.category, item.size, item.unit, Math.max(item.currentStock, 0), 10]
+        );
+        const ppeId = ppeResult.rows[0].id;
+        itemsCreated++;
+
+        // Insert incoming transactions
+        for (const entry of item.incomingEntries) {
+          const dateStr = entry.date || new Date().toISOString().slice(0, 10);
+          await client.query(
+            'INSERT INTO incoming_ppe (date_received, ppe_id, quantity, supplier, received_by, remarks) VALUES ($1, $2, $3, $4, $5, $6)',
+            [dateStr, ppeId, entry.quantity, 'Excel Import', 'System', 'Auto-imported from PPE-INVENTORY-2026.xlsx']
+          );
+          await client.query(
+            'INSERT INTO transactions (ppe_id, transaction_type, quantity, date, responsible_person, remarks) VALUES ($1, $2, $3, $4, $5, $6)',
+            [ppeId, 'IN', entry.quantity, dateStr, 'System', 'Auto-imported from Excel']
+          );
+          transactionsCreated++;
+        }
+
+        // Insert outgoing transactions
+        for (const entry of item.outgoingEntries) {
+          const dateStr = entry.date || new Date().toISOString().slice(0, 10);
+          await client.query(
+            'INSERT INTO transactions (ppe_id, transaction_type, quantity, date, responsible_person, remarks) VALUES ($1, $2, $3, $4, $5, $6)',
+            [ppeId, 'OUT', entry.quantity, dateStr, 'System', 'Auto-imported from Excel']
+          );
+          transactionsCreated++;
+        }
+      }
+
+      await client.query('COMMIT');
+      res.json({
+        success: true,
+        message: `Successfully imported ${itemsCreated} PPE items with ${transactionsCreated} transactions`,
+        itemsCreated,
+        transactionsCreated,
+      });
+    } catch (dbErr) {
+      await client.query('ROLLBACK');
+      throw dbErr;
+    } finally {
+      client.release();
+    }
+  } catch (e) {
+    console.error('Import error:', e);
+    res.json({ success: false, message: e.message });
+  }
+});
+
+// Helper: parse Excel date values
+function _parseExcelDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val.toISOString().slice(0, 10);
+  const s = String(val).trim().replace(/^"|"$/g, '');
+  // Try ISO format
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  // Try MM/DD/YYYY or MM/DD/YY
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m) {
+    let year = parseInt(m[3]);
+    if (year < 100) year += 2000;
+    return `${year}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  }
+  return null;
+}
+
+// Helper: get numeric value from cell
+function _getNumeric(val) {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'object' && val.result !== undefined) return typeof val.result === 'number' ? val.result : 0;
+  const n = parseFloat(val);
+  return isNaN(n) ? 0 : n;
+}
+
 // ==================== HEALTH CHECK (Keep-Alive) ====================
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
